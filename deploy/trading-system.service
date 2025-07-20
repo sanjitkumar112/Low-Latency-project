@@ -1,0 +1,36 @@
+[Unit]
+Description=Low-Latency Trading System
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/trading-system
+ExecStart=/opt/trading-system/main
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trading-system
+
+# Performance tuning
+Nice=-10
+IOSchedulingClass=1
+IOSchedulingPriority=4
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=32768
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/trading-system /var/log/trading-system
+
+[Install]
+WantedBy=multi-user.target 

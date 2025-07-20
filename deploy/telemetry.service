@@ -1,0 +1,35 @@
+[Unit]
+Description=Telemetry Service for Low-Latency Trading System
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/trading-system/telemetry
+ExecStart=/usr/bin/python3 -m uvicorn metrics:app --host 0.0.0.0 --port 8000 --workers 1
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=telemetry
+
+# Environment variables
+Environment=PYTHONPATH=/opt/trading-system/telemetry
+Environment=PYTHONUNBUFFERED=1
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=32768
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/trading-system /var/log/trading-system
+
+[Install]
+WantedBy=multi-user.target 
