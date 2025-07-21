@@ -1,0 +1,60 @@
+# Build artifacts
+build/
+*.o
+*.obj
+*.exe
+*.out
+ring_buffer_demo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Telemetry data (generated during testing)
+telemetry.log
+*.csv
+
+# Benchmark results (generated during testing)
+benchmark/local_results/
+benchmark/*_results/
+*.png
+*.jpg
+*.jpeg
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# AWS credentials (if any)
+.aws/
+credentials 
