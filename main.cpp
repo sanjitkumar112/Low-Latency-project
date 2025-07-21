@@ -7,32 +7,27 @@
 #include <signal.h>
 #include "ring_buffer.hpp"
 #include "batcher.hpp"
-// Network simulation forward declarations
+
 enum class NetworkType { TCP, UDP, SHM };
 
-// TCP simulation functions
 void init_tcp_simulator(double drop_rate, int base_delay_ms, int max_retries, bool enable_congestion_control);
 bool tcp_send_orders(const std::vector<Order>& orders, uint64_t batch_latency_us);
 struct TCPStats { int active_connections; int dropped_packets; int retransmissions; int base_delay_ms; double drop_rate; };
 TCPStats get_tcp_stats();
 
-// UDP simulation functions
 void init_udp_simulator(double drop_rate, int base_delay_us, bool enable_jitter);
 bool udp_send_orders(const std::vector<Order>& orders, uint64_t batch_latency_us);
 struct UDPStats { int packets_sent; int packets_dropped; double avg_delay_us; double actual_drop_rate; int base_delay_us; double configured_drop_rate; };
 UDPStats get_udp_stats();
 
-// SHM simulation functions
 void init_shm_simulator(bool enable_noise, int noise_range_ns);
 bool shm_send_orders(const std::vector<Order>& orders, uint64_t batch_latency_us);
 struct SHMStats { int messages_sent; double avg_delay_ns; uint64_t min_delay_ns; uint64_t max_delay_ns; bool noise_enabled; int noise_range_ns; };
 SHMStats get_shm_stats();
 
-// Global control flags
 std::atomic<bool> g_shutdown_requested{false};
 std::atomic<bool> g_running{false};
 
-// Runtime configuration
 struct RuntimeConfig {
     int num_producers = 2;
     int num_consumers = 3;
@@ -45,7 +40,6 @@ struct RuntimeConfig {
     NetworkType network_type = NetworkType::TCP;
 };
 
-// Global statistics
 struct Stats {
     std::atomic<uint64_t> orders_produced{0};
     std::atomic<uint64_t> orders_consumed{0};
@@ -53,23 +47,18 @@ struct Stats {
     std::atomic<uint64_t> total_latency_us{0};
 };
 
-// Global instances
 std::unique_ptr<OrderRingBuffer> g_buffer;
 std::unique_ptr<Batcher> g_batcher;
 Stats g_stats;
 RuntimeConfig g_config;
 
-// Signal handler for clean shutdown
 void signal_handler(int signal) {
     std::cout << "\nReceived signal " << signal << ". Initiating shutdown...\n";
     g_shutdown_requested = true;
 }
 
-// Network simulation function
 bool simulate_network_send(const std::vector<Order>& batch, uint64_t latency_us) {
     bool success = true;
-    
-    // Use network simulation if enabled
     if (g_config.enable_network_simulation) {
         switch (g_config.network_type) {
             case NetworkType::TCP:
@@ -83,32 +72,24 @@ bool simulate_network_send(const std::vector<Order>& batch, uint64_t latency_us)
                 break;
         }
     }
-    
-    // Record statistics
     if (success) {
         g_stats.batches_sent++;
         g_stats.total_latency_us += latency_us;
         g_stats.orders_consumed += batch.size();
     }
-    
     return success;
 }
 
-// Producer thread function
 void producer_thread(int producer_id) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> price_dist(100.0, 200.0);
     std::uniform_int_distribution<> qty_dist(1, 1000);
     std::uniform_int_distribution<> type_dist(0, 1);
-    
     std::vector<std::string> symbols = {"AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"};
-    
     uint64_t order_id_base = static_cast<uint64_t>(producer_id) * 1000000;
     uint64_t order_count = 0;
-    
     while (!g_shutdown_requested && g_running) {
-        // Create order
         Order order(
             order_id_base + order_count,
             symbols[gen() % symbols.size()],
@@ -116,85 +97,56 @@ void producer_thread(int producer_id) {
             price_dist(gen),
             qty_dist(gen)
         );
-        
-        // Push to ring buffer
         if (g_buffer->try_push(order)) {
             g_stats.orders_produced++;
         }
-        
         order_count++;
-        
-        // Simple rate limiting - just a small delay
         std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
 }
 
-// Consumer thread function
 void consumer_thread(int consumer_id) {
-    (void)consumer_id; // Suppress unused parameter warning
+    (void)consumer_id;
     while (!g_shutdown_requested && g_running) {
         Order order;
-        
         if (g_buffer->try_pop(order)) {
             if (g_config.enable_batching) {
-                // Add to batcher
                 g_batcher->add_order(order);
-                
-                // Check for timeout
                 g_batcher->check_timeout();
             } else {
-                // Process immediately
                 simulate_network_send({order}, 0);
             }
         }
-        
-        // Small delay to prevent busy waiting
         std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
 }
 
-// Telemetry logger thread
 void telemetry_logger_thread() {
     auto last_stats_time = std::chrono::high_resolution_clock::now();
-    
     while (!g_shutdown_requested && g_running) {
         auto now = std::chrono::high_resolution_clock::now();
         auto time_since_last = std::chrono::duration_cast<std::chrono::seconds>(now - last_stats_time);
-        
-        if (time_since_last.count() >= 1) { // Log every second
-            // Calculate throughput
+        if (time_since_last.count() >= 1) {
             double throughput = static_cast<double>(g_stats.orders_consumed.load()) / time_since_last.count();
-            
-            // Calculate average latency
             double avg_latency = g_stats.batches_sent.load() > 0 ? 
                 static_cast<double>(g_stats.total_latency_us.load()) / g_stats.batches_sent.load() : 0.0;
-            
             std::cout << "Stats: Produced=" << g_stats.orders_produced.load() 
                       << ", Consumed=" << g_stats.orders_consumed.load()
                       << ", Batches=" << g_stats.batches_sent.load()
                       << ", Throughput=" << std::fixed << std::setprecision(2) << throughput << " ops/sec"
                       << ", AvgLatency=" << avg_latency << "μs"
                       << ", Buffer=" << g_buffer->size() << "/" << g_buffer->capacity() << "\n";
-            
             last_stats_time = now;
         }
-        
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 
-// Initialize system
 bool initialize_system(const RuntimeConfig& config) {
     std::cout << "Initializing low-latency trading system...\n";
-    
-    // Set up signal handlers
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
-    
-    // Create ring buffer
     g_buffer = std::make_unique<OrderRingBuffer>(config.buffer_size);
-    
-    // Initialize network simulation
     switch (config.network_type) {
         case NetworkType::TCP:
             init_tcp_simulator(0.02, 5, 3, true);
@@ -206,19 +158,14 @@ bool initialize_system(const RuntimeConfig& config) {
             init_shm_simulator(true, 100);
             break;
     }
-    
-    // Create batcher if enabled
     if (config.enable_batching) {
         g_batcher = std::make_unique<Batcher>(
             config.batch_size,
-            std::chrono::microseconds(1000), // 1ms timeout
+            std::chrono::microseconds(1000),
             simulate_network_send
         );
     }
-    
-    // Copy configuration
     g_config = config;
-    
     std::cout << "System initialized successfully.\n";
     std::cout << "Configuration: Producers=" << config.num_producers 
               << ", Consumers=" << config.num_consumers
@@ -227,25 +174,16 @@ bool initialize_system(const RuntimeConfig& config) {
               << ", Rate=" << config.orders_per_second << " ops/sec"
               << ", Network=" << (config.network_type == NetworkType::TCP ? "TCP" : 
                                  config.network_type == NetworkType::UDP ? "UDP" : "SHM") << "\n";
-    
     return true;
 }
 
-// Clean shutdown
 void shutdown_system() {
     std::cout << "\nInitiating system shutdown...\n";
-    
     g_running = false;
-    
-    // Force flush any remaining batches
     if (g_batcher) {
         g_batcher->force_flush();
     }
-    
-    // Wait a bit for threads to finish
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    
-    // Print final statistics
     std::cout << "\n=== Final Statistics ===\n";
     std::cout << "Total orders produced: " << g_stats.orders_produced.load() << "\n";
     std::cout << "Total orders consumed: " << g_stats.orders_consumed.load() << "\n";
@@ -255,8 +193,6 @@ void shutdown_system() {
                   << static_cast<double>(g_stats.total_latency_us.load()) / g_stats.batches_sent.load() 
                   << "μs\n";
     }
-    
-    // Print network statistics
     if (g_config.enable_network_simulation) {
         switch (g_config.network_type) {
             case NetworkType::TCP: {
@@ -296,20 +232,14 @@ void shutdown_system() {
             }
         }
     }
-    
     std::cout << "======================\n";
-    
     std::cout << "System shutdown complete.\n";
 }
 
-// Main function
 int main(int argc, char* argv[]) {
     std::cout << "Low-Latency Trading System\n";
     std::cout << "==========================\n\n";
-    
-    // Parse command line arguments
     RuntimeConfig config;
-    
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--producers" && i + 1 < argc) {
@@ -356,61 +286,37 @@ int main(int argc, char* argv[]) {
             return 0;
         }
     }
-    
-    // Initialize system
     if (!initialize_system(config)) {
         std::cerr << "Failed to initialize system.\n";
         return 1;
     }
-    
-    // Set running flag first
     g_running = true;
-    
-    // Create and start threads
     std::vector<std::thread> threads;
-    
-    // Start producer threads
     for (int i = 0; i < config.num_producers; ++i) {
         threads.emplace_back(producer_thread, i);
     }
-    
-    // Start consumer threads
     for (int i = 0; i < config.num_consumers; ++i) {
         threads.emplace_back(consumer_thread, i);
     }
-    
-    // Start telemetry logger thread
     threads.emplace_back(telemetry_logger_thread);
-    
     std::cout << "\nSystem started. Press Ctrl+C to stop.\n";
     std::cout << "Runtime: " << config.runtime_seconds << " seconds\n\n";
-    
-    // Wait for runtime or shutdown signal
     auto start_time = std::chrono::high_resolution_clock::now();
     while (!g_shutdown_requested && g_running) {
         auto now = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time);
-        
         if (elapsed.count() >= config.runtime_seconds) {
             std::cout << "\nRuntime completed. Initiating shutdown...\n";
             break;
         }
-        
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    
-    // Stop the system
     g_running = false;
-    
-    // Wait for all threads to finish
     for (auto& thread : threads) {
         if (thread.joinable()) {
             thread.join();
         }
     }
-    
-    // Clean shutdown
     shutdown_system();
-    
     return 0;
 }
