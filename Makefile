@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -pthread -march=native -mtune=native
+CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -pthread -march=native -mtune=native -I.
 TARGET = ring_buffer_demo
 SOURCES = main.cpp src/network_sim/tcp_sim.cpp src/network_sim/udp_sim.cpp src/network_sim/shm_sim.cpp
 HEADERS = order.hpp ring_buffer.hpp batcher.hpp

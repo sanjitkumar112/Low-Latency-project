@@ -6,62 +6,37 @@
 #include "order.hpp"
 
 class Batcher {
-private:
-    std::vector<Order> batch_buffer_;
-    size_t batch_size_threshold_;
+    std::vector<Order> buffer_;
+    size_t batch_size_;
     std::chrono::microseconds timeout_;
-    std::chrono::high_resolution_clock::time_point first_order_time_;
-    bool has_orders_;
-    std::function<void(const std::vector<Order>&, uint64_t)> send_callback_;
+    std::chrono::high_resolution_clock::time_point first_time_;
+    bool started_ = false;
+    std::function<void(const std::vector<Order>&, uint64_t)> send_;
 public:
-    Batcher(size_t batch_size, std::chrono::microseconds timeout, 
-            std::function<void(const std::vector<Order>&, uint64_t)> send_callback)
-        : batch_size_threshold_(batch_size), timeout_(timeout), 
-          has_orders_(false), send_callback_(send_callback) {}
-    void add_order(const Order& order) {
-        if (!has_orders_) {
-            first_order_time_ = std::chrono::high_resolution_clock::now();
-            has_orders_ = true;
-        }
-        batch_buffer_.push_back(order);
-        if (batch_buffer_.size() >= batch_size_threshold_) {
-            flush_batch();
-        }
+    Batcher(size_t batch_size, std::chrono::microseconds timeout, std::function<void(const std::vector<Order>&, uint64_t)> send)
+        : batch_size_(batch_size), timeout_(timeout), send_(send) {}
+    void add_order(const Order& o) {
+        if (!started_) { first_time_ = std::chrono::high_resolution_clock::now(); started_ = true; }
+        buffer_.push_back(o);
+        if (buffer_.size() >= batch_size_) flush();
     }
     bool check_timeout() {
-        if (!has_orders_ || batch_buffer_.empty()) {
-            return false;
-        }
+        if (!started_ || buffer_.empty()) return false;
         auto now = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - first_order_time_);
-        if (elapsed >= timeout_) {
-            flush_batch();
+        if (std::chrono::duration_cast<std::chrono::microseconds>(now - first_time_) >= timeout_) {
+            flush();
             return true;
         }
         return false;
     }
-    void force_flush() {
-        if (!batch_buffer_.empty()) {
-            flush_batch();
-        }
-    }
-    size_t get_current_batch_size() const {
-        return batch_buffer_.size();
-    }
-    bool has_orders() const {
-        return has_orders_;
-    }
+    void force_flush() { if (!buffer_.empty()) flush(); }
 private:
-    void flush_batch() {
-        if (batch_buffer_.empty()) {
-            return;
-        }
+    void flush() {
+        if (buffer_.empty()) return;
         auto now = std::chrono::high_resolution_clock::now();
-        auto latency = std::chrono::duration_cast<std::chrono::microseconds>(now - first_order_time_);
-        if (send_callback_) {
-            send_callback_(batch_buffer_, latency.count());
-        }
-        batch_buffer_.clear();
-        has_orders_ = false;
+        auto latency = std::chrono::duration_cast<std::chrono::microseconds>(now - first_time_);
+        if (send_) send_(buffer_, latency.count());
+        buffer_.clear();
+        started_ = false;
     }
 }; 

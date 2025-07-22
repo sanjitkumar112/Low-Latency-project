@@ -1,62 +1,66 @@
 # Low-Latency Trading System
 
-This project is a simple, high-performance trading system designed to demonstrate low-latency order processing using C++ and Python.
-
-I built this project as my first deep dive into systems programming and real-world software engineering. My goal was to understand how high-frequency trading systems achieve ultra-low latency and high throughput, and to learn how to design software that is both fast and reliable.
-
-**Thought Process & Design Journey:**
-- I started by researching how trading systems work, especially the importance of minimizing delays between when an order is created and when it is processed.
-- To achieve this, I implemented a **lock-free ring buffer** in C++. This allows producer and consumer threads to communicate without blocking each other, which is crucial for speed.
-- I wanted to see how batching orders could improve efficiency, so I added a **batch processor** that groups orders before sending them for execution.
-- Real trading systems face unpredictable network conditions, so I included **network simulation modules** (TCP, UDP, shared memory) to test how the system performs under different scenarios.
-- To make the system observable, I built a **real-time telemetry dashboard** using Python and FastAPI. This lets me (and others) monitor performance metrics live, just like in professional environments.
-- Finally, I created a **benchmarking tool** in Python to analyze and visualize the system's performance, helping me identify bottlenecks and optimize further.
-
-Throughout the project, I focused on writing clean, modular code and documenting my process, so others can learn from my journey or use this as a starting point for their own experiments.
+A simple, efficient C++ project that demonstrates low-latency order processing using multi-threading, batching, and network simulation.
 
 ## Features
-- **Lock-free ring buffer** for fast, thread-safe communication
-- **Batch order processing** for efficiency
-- **Network simulation** (TCP, UDP, shared memory)
-- **Real-time telemetry dashboard** (Python FastAPI)
-- **Performance analysis** (Python benchmarking tool)
+- Lock-free ring buffer for fast, thread-safe communication
+- Batch order processing for efficiency
+- Network simulation: choose TCP, UDP, or SHM (shared memory)
+- Simple, clear statistics output at the end of each run
 
 ## Getting Started
 
 ### Prerequisites
 - C++17 compiler (e.g., g++)
-- Python 3.8+
-- Python packages: `fastapi`, `uvicorn`, `prometheus-client`, `pandas`, `matplotlib`, `seaborn`, `numpy`
+- `make` utility (for building)
 
-### Build and Run (C++)
+### Build and Run
+
 ```bash
+cd /Users/sanjitkumar/Documents/Projects/Low-Latency-project
 make
 ./ring_buffer_demo
 ```
 
-### Start Telemetry Service (Python)
-```bash
-cd telemetry
-pip install -r requirements.txt
-python3 metrics.py
+### Selecting Network Simulation Type
+
+You can choose the network simulation mode (TCP, UDP, or SHM) by editing this line in `main.cpp`:
+
+```cpp
+Config cfg;
+cfg.net_type = NetworkType::TCP; // Change to NetworkType::UDP or NetworkType::SHM
 ```
 
-### Run Benchmark Analysis (Python)
-```bash
-cd benchmark
-pip install -r requirements.txt
-python3 plots.py ../telemetry.log
-```
+- `NetworkType::TCP` – Simulates reliable, congestion-controlled network
+- `NetworkType::UDP` – Simulates fast, lossy network
+- `NetworkType::SHM` – Simulates shared memory (very low latency)
 
-### View Dashboard
-Open your browser to: [http://localhost:8000](http://localhost:8000)
+Rebuild and run after making changes.
+
+## Output
+At the end of each run, you'll see a summary like:
+
+```
+=== Final Statistics ===
+Total orders produced: ...
+Total orders consumed: ...
+Total batches sent: ...
+Average batch latency: ...μs
+
+=== [Network] Network Statistics ===
+... (network-specific stats)
+==============================
+```
 
 ## Project Structure
-- `main.cpp`, `order.hpp`, `ring_buffer.hpp`, `batcher.hpp`: C++ trading system
-- `src/network_sim/`: Network simulation modules
-- `telemetry/metrics.py`: Real-time metrics API
-- `benchmark/plots.py`: Performance analysis tool
+- `main.cpp`, `order.hpp`, `ring_buffer.hpp`, `batcher.hpp`: C++ core logic
+- `src/network_sim/`: Network simulation modules (TCP, UDP, SHM)
+
+## Clean Up
+- You can safely delete any `.png`, `.txt`, `.DS_Store`, `__pycache__`, or output files. Only the source code is needed to rebuild and rerun everything.
 
 ---
 
-**For learning, experimenting, and exploring low-latency system design!** 
+## Connect
+
+Follow me on Twitter: [@sanjitkmr112](https://x.com/sanjitkmr112/status/1947681278679019638) 
